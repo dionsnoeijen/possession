@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "possession"
+version = "0.1.0"
+description = "AI takes control of your UI. Framework for building hybrid chat + UI applications."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "agno>=2.5",
+    "uvicorn[standard]>=0.34",
+]
+
+[project.optional-dependencies]
+postgres = ["sqlalchemy>=2.0", "psycopg2-binary>=2.9"]
+anthropic = ["anthropic>=0.50"]
+jwt = ["PyJWT>=2.8"]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "PyJWT>=2.8",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/possession"]
