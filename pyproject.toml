@@ -6,6 +6,9 @@ build-backend = "hatchling.build"
 name = "possession"
 version = "0.1.0"
 description = "AI takes control of your UI. Framework for building hybrid chat + UI applications."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Dion Snoeijen" }]
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
