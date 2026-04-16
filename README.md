@@ -27,27 +27,35 @@ The library provides the glue: a WebSocket protocol, an Agno agent tool that pub
 
 ## Install
 
-Not yet on PyPI. Three options:
+Not yet on PyPI. For now, install from GitHub:
 
-**Editable local install** (for development):
-```bash
-pip install -e /path/to/possession
-```
-
-**From GitHub**:
 ```bash
 pip install git+https://github.com/dionsnoeijen/possession.git
 ```
 
-**Once published**:
+With optional extras:
+
 ```bash
-pip install possession
+pip install "possession[jwt] @ git+https://github.com/dionsnoeijen/possession.git"
+pip install "possession[postgres] @ git+https://github.com/dionsnoeijen/possession.git"
 ```
 
-Optional extras:
+Available extras:
+- `jwt`: built-in JWT auth helper (adds PyJWT)
+- `postgres`: PostgresDb session storage (adds sqlalchemy, psycopg2-binary)
+- `anthropic`: Claude model support via Agno (adds anthropic)
+
+For local development:
 ```bash
-pip install "possession[postgres]"   # PostgresDb session storage
-pip install "possession[jwt]"        # built-in JWT auth helper
+git clone git@github.com:dionsnoeijen/possession.git
+cd possession
+pip install -e ".[dev]"
+```
+
+Once published to PyPI:
+```bash
+pip install possession
+pip install "possession[jwt,postgres]"
 ```
 
 ## Quick start
