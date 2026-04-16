@@ -25,6 +25,67 @@ You have a regular web app. Pages, tables, forms, the usual. `possession` lets y
 
 The library provides the glue: a WebSocket protocol, an Agno agent tool that publishes UI events, and the services to wire it together. You bring your domain tools, your views, your layout.
 
+## Philosophy: explicit control
+
+Possession is built around a deliberate choice: the agent can only do what you give it tools to do.
+
+No raw database access. No arbitrary code execution. No open-ended generation of SQL, shell commands, or business logic. Every action the agent can take is a named tool you write, with parameters you define and authorization you enforce.
+
+This has trade-offs. You write more tools. Adding a new capability means adding a new tool. But in return:
+
+- Every action is auditable (tool calls are logged by name)
+- Every action is authorized (you decide what the agent can do per user, per role, per context)
+- Every action is validated (your tool validates input before hitting the store)
+- Business logic stays in code, not in an LLM's head
+- You can test your tools without running the agent
+
+If you want a pure "raw access" experiment, possession is the wrong library. If you want to ship AI-driven features into a real SaaS app without losing control, this is the approach.
+
+## Managing tool bloat
+
+The controlled approach scales only as far as your tool count stays manageable. A few patterns to keep it clean:
+
+**Grouped tools.** Instead of 15 flat tools, group related actions into one tool with an `action` parameter:
+
+```python
+class DealsTool(Toolkit):
+    def manage_deal(self, deal_id: str, action: str, data: str = "") -> str:
+        """Manage a deal.
+
+        Args:
+            deal_id: The deal ID.
+            action: One of: update_stage, add_note, close_won, close_lost, reopen.
+            data: JSON payload for the action (stage name, note content, etc.).
+        """
+        ...
+```
+
+One tool, many actions. Less prompt bloat.
+
+**Scoped tool loading.** Register different toolkits based on the user's role or the current view. A read-only user gets read-only tools. An admin gets the full set.
+
+```python
+def make_session(user):
+    tools = [read_tools]
+    if user["role"] == "admin":
+        tools.append(admin_tools)
+    ...
+```
+
+**Resource-style reads.** A single `query_resource(type, filters)` tool can cover many read cases. Writes stay explicit.
+
+```python
+def query_resource(self, resource_type: str, filters: str = "{}") -> str:
+    """Query a resource with filters. Read-only.
+
+    Args:
+        resource_type: One of: contacts, deals, invoices, notes.
+        filters: JSON object with filter criteria.
+        """
+```
+
+Possession does not prescribe any of these. Your tools, your call. But the library stays out of the way, so you can go as flat or as hierarchical as your app needs.
+
 ## Install
 
 Not yet on PyPI. For now, install from GitHub:
