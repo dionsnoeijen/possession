@@ -55,7 +55,7 @@ def build_agent(
         "tools": all_tools,
         "instructions": all_instructions,
         "markdown": True,
-        "add_history_to_messages": True,
+        "add_history_to_context": True,
         "num_history_runs": history_runs,
     }
     if db is not None:

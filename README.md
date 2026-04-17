@@ -214,7 +214,7 @@ Your domain tools extend `agno.tools.Toolkit` and receive the `UITool` to publis
 
 ```python
 from agno.tools import Toolkit
-from possession import UITool
+from possession import UITool, possession_tool
 
 class CRMTool(Toolkit):
     def __init__(self, ui: UITool, store, user_id: str):
@@ -225,15 +225,28 @@ class CRMTool(Toolkit):
         self.register(self.search_contacts)
         self.register(self.create_reminder)
 
+    @possession_tool(label="Contacts searched")
     def search_contacts(self, query: str = "") -> str:
-        """Search contacts and show them in the contacts view."""
+        """Search contacts by name, company, or email.
+
+        Use this when the user wants to find contacts or filter the list.
+
+        Args:
+            query: Search text to match against name, email, or company.
+        """
         contacts = self.store.search(query, owner=self.user_id)
         self.ui.navigate("contacts")
         self.ui.send_view_data("contacts", contacts)
         return f"Found {len(contacts)} contacts."
 
+    @possession_tool(label="Reminder drafted")
     def create_reminder(self, contact_id: str, message: str) -> str:
-        """Render a reminder draft in the notifications zone."""
+        """Create a reminder draft for a contact.
+
+        Args:
+            contact_id: The ID of the contact.
+            message: The body of the reminder.
+        """
         notif_id = self.ui.render_in_zone(
             zone="notifications",
             component_type="reminder_draft",
@@ -246,7 +259,40 @@ class CRMTool(Toolkit):
         return f"Draft reminder created: {notif_id}"
 ```
 
-Each tool does two things: business logic, and UI intent. The agent decides when to call them. The WebSocket handler streams the events to the frontend.
+Each tool does two things: business logic, and UI intent. The agent decides when to call them.
+
+### Two things the LLM reads from your tools
+
+1. **The docstring.** Agno extracts the docstring of each registered method and sends it to the LLM as the tool's description. This is what the model reads to decide WHEN to call the tool and WHAT arguments to pass. Be specific: mention when to use it, what each argument means, and what exact values are accepted for enum-like parameters. If you add select values to the docstring, the model will use them verbatim.
+2. **The type hints.** Argument types are turned into a JSON schema that constrains the LLM's calls. String, number, boolean, and JSON-serialised dicts work well.
+
+### Tool metadata via `@possession_tool`
+
+Wrap your tools with `@possession_tool(...)` to attach metadata that travels with every tool-call event to the frontend. The UI renders this as a compact badge above the assistant's response.
+
+```python
+@possession_tool(label="Deals loaded")
+def list_deals(self, stage: str = "") -> str:
+    ...
+
+@possession_tool(label="Reminder drafted", icon="mail")
+def create_reminder(self, ...):
+    ...
+
+@possession_tool(label="Page set", silent=True)
+def set_form_page(self, page: int) -> str:
+    ...
+```
+
+Supported arguments:
+
+| Argument | Type | Purpose |
+|----------|------|---------|
+| `label` | `str` (required) | Human-readable badge text in the chat. |
+| `icon` | `str` (optional) | Icon identifier. The frontend maps it to its own icon library via the Chat `iconMap` prop. |
+| `silent` | `bool` (optional) | Skip rendering a badge for this tool. Useful for plumbing tools the user should not care about. |
+
+If you skip the decorator, the frontend falls back to a prettified version of the function name (`list_deals` → `List deals`). Metadata is defined ONCE on the backend — the frontend does not need a duplicate map.
 
 ## The UITool API
 

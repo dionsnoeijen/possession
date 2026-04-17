@@ -9,6 +9,7 @@ from possession.protocols import (
     WebSocketAdapter,
 )
 from possession.services.message_router import MessageRouter
+from possession.tool_meta import get_tool_meta
 
 
 def _disconnect_types() -> tuple[type[BaseException], ...]:
@@ -74,13 +75,40 @@ class WebSocketSession:
             for event in self.bus.drain():
                 await websocket.send_json(event)
 
-            if getattr(chunk, "content", None):
-                chunks.append(chunk.content)
-                await websocket.send_json({
-                    "type": "chat",
-                    "content": chunk.content,
-                    "streaming": True,
-                })
+            event_name = str(getattr(chunk, "event", "") or "")
+
+            if event_name in ("ToolCallStarted", "ToolCallCompleted"):
+                tool = getattr(chunk, "tool", None)
+                name = getattr(tool, "tool_name", None) if tool else None
+                if name:
+                    meta = get_tool_meta(name)
+                    if not meta.silent:
+                        payload: dict[str, Any] = {
+                            "type": "tool_call",
+                            "status": "started" if event_name == "ToolCallStarted" else "completed",
+                            "name": name,
+                            "label": meta.label,
+                        }
+                        if meta.icon:
+                            payload["icon"] = meta.icon
+                        await websocket.send_json(payload)
+                continue
+
+            # Only forward actual text content. Skip RunCompleted (full content
+            # duplicate at end), RunStarted, ModelRequestStarted, etc.
+            if event_name != "RunContent":
+                continue
+
+            content = getattr(chunk, "content", None)
+            if not content:
+                continue
+
+            chunks.append(content)
+            await websocket.send_json({
+                "type": "chat",
+                "content": content,
+                "streaming": True,
+            })
 
         # Drain any remaining events
         for event in self.bus.drain():

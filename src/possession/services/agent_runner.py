@@ -12,10 +12,16 @@ class AgnoAgentRunner:
         self.agent = agent
 
     async def run(self, message: str, session_id: str) -> AsyncIterator[Any]:
-        stream = await self.agent.arun(
-            message=message,
+        result = self.agent.arun(
+            input=message,
             session_id=session_id,
             stream=True,
+            stream_events=True,
         )
-        async for chunk in stream:
-            yield chunk
+        if hasattr(result, "__aiter__"):
+            async for chunk in result:
+                yield chunk
+        else:
+            stream = await result
+            async for chunk in stream:
+                yield chunk

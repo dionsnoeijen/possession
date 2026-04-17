@@ -15,6 +15,7 @@ from possession.services import (
     QueueEventBus,
     WebSocketSession,
 )
+from possession.tool_meta import possession_tool, get_tool_label
 from possession.ui_tool import UITool
 
 __all__ = [
@@ -36,4 +37,7 @@ __all__ = [
     # Auth
     "jwt_auth",
     "header_auth",
+    # Tool metadata
+    "possession_tool",
+    "get_tool_label",
 ]
