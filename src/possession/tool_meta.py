@@ -53,10 +53,20 @@ def possession_tool(
 
 
 def get_tool_meta(name: str) -> ToolMeta:
-    """Return metadata for a tool, falling back to a prettified label."""
-    if name in _META:
-        return _META[name]
-    fallback = name.replace("_", " ").capitalize() if name else "Tool"
+    """Return metadata for a tool, falling back to a prettified label.
+
+    Claude Agent SDK reports MCP tools as ``mcp__<server>__<tool>``. Strip
+    that prefix so lookups work with the bare function name that
+    @possession_tool stored.
+    """
+    short = name
+    if name.startswith("mcp__"):
+        parts = name.split("__", 2)
+        if len(parts) == 3:
+            short = parts[2]
+    if short in _META:
+        return _META[short]
+    fallback = short.replace("_", " ").capitalize() if short else "Tool"
     return ToolMeta(label=fallback)
 
 

@@ -23,7 +23,7 @@ You have a regular web app. Pages, tables, forms, the usual. `possession` lets y
 - Highlight items to draw attention
 - Send notifications with confirmation flows
 
-The library provides the glue: a WebSocket protocol, an Agno agent tool that publishes UI events, and the services to wire it together. You bring your domain tools, your views, your layout.
+The library provides the glue: a WebSocket protocol, agent runners for both Agno and Claude Agent SDK (the engine behind Claude Code), and the services to wire it together. You bring your domain tools, your views, your layout.
 
 ## Philosophy: explicit control
 
@@ -105,6 +105,7 @@ Available extras:
 - `jwt`: built-in JWT auth helper (adds PyJWT)
 - `postgres`: PostgresDb session storage (adds sqlalchemy, psycopg2-binary)
 - `anthropic`: Claude model support via Agno (adds anthropic)
+- `claude-sdk`: Claude Agent SDK runner — full Claude Code engine with built-in filesystem / bash / grep tools (adds claude-agent-sdk)
 
 For local development:
 ```bash
@@ -164,6 +165,71 @@ mount_possession(
 ```
 
 That's it for the backend. Pair it with [`possession-react`](https://github.com/dionsnoeijen/possession-react) on the frontend.
+
+## Quick start (Claude Agent SDK)
+
+If you want Claude Code's agent engine instead of Agno — same built-in filesystem tools (Read, Grep, Glob, Bash, Edit), same reasoning loop, same streaming — use `ClaudeSDKAgentRunner`. Your domain tools get defined with the SDK's `@tool` decorator and bundled via `create_sdk_mcp_server`.
+
+```python
+from claude_agent_sdk import ClaudeAgentOptions, create_sdk_mcp_server, tool
+from possession import (
+    QueueEventBus, UITool, ClaudeSDKAgentRunner,
+    MessageRouter, WebSocketSession, possession_tool, mount_possession,
+)
+
+def build_tools(ui: UITool, user):
+    @tool("search_contacts", "Search contacts by name/email/company.", {"query": str})
+    @possession_tool(label="Contacts searched")
+    async def search_contacts(args):
+        contacts = store.search(args["query"], owner=user["sub"])
+        ui.navigate("contacts")
+        ui.send_view_data("contacts", contacts)
+        return {"content": [{"type": "text", "text": f"Found {len(contacts)}"}]}
+
+    return [search_contacts]
+
+def make_session(user):
+    bus = QueueEventBus()
+    ui = UITool(event_bus=bus)
+    tools = build_tools(ui, user)
+
+    server = create_sdk_mcp_server(name="crm", version="0.1.0", tools=tools)
+
+    options = ClaudeAgentOptions(
+        system_prompt="You are the CRM assistant.",
+        mcp_servers={"crm": server},
+        allowed_tools=[f"mcp__crm__{t.name}" for t in tools] + ["Read", "Grep", "Glob"],
+        cwd="/path/to/project",
+        include_partial_messages=True,                        # enables token-level streaming
+        extra_args={"thinking": "enabled"},                   # enables reasoning events
+    )
+
+    runner = ClaudeSDKAgentRunner(options)
+    router = MessageRouter()
+    return WebSocketSession(runner, bus, router, session_id=f"user:{user['sub']}")
+
+mount_possession(app, "/ws/chat", make_session)
+```
+
+The `@possession_tool` decorator works the same as with Agno — labels are looked up by the bare function name, and the `mcp__<server>__<tool>` prefix is stripped automatically.
+
+**Install:**
+```bash
+pip install "possession[claude-sdk] @ git+https://github.com/dionsnoeijen/possession.git"
+```
+
+## Tool event stream
+
+Whichever runner you use, `WebSocketSession` forwards a consistent set of messages to the frontend:
+
+- `tool_call` (status `started` / `completed`) with `name`, `label`, optional `args` and `icon`
+- `reasoning` (Claude SDK only, when thinking is enabled) — live thinking-block deltas
+- `chat` — token-level text deltas
+- `chat_end` — stream complete
+- `ui_action` — render/update/remove for `PossessionZone` components
+- `view_data`, `form_fill`, `highlight_item` — zone-less convenience channels
+
+The possession-react frontend consumes these out of the box.
 
 ## Auth
 
@@ -342,6 +408,7 @@ protocols.py             Interfaces
 services/
   event_bus.py           QueueEventBus (thread-safe)
   agent_runner.py        AgnoAgentRunner
+  claude_sdk_runner.py   ClaudeSDKAgentRunner (Claude Code engine)
   message_router.py      MessageRouter
   session.py             WebSocketSession (orchestrator)
 
@@ -372,9 +439,11 @@ def test_my_tool_publishes_navigate_event():
 
 Run the library's own tests with `pytest` after `pip install -e ".[dev]"`.
 
-## Model agnostic
+## Runner & model agnostic
 
-You pick the model. Anything Agno supports works:
+You pick both the **runner** and the **model**. Two runners are built-in; both implement the same `AgentRunner` protocol so `WebSocketSession` doesn't care which one you use.
+
+**`AgnoAgentRunner`** — wraps an Agno Agent. Any model Agno supports works:
 
 ```python
 from agno.models.anthropic import Claude
@@ -387,6 +456,12 @@ build_agent(model=OpenAIChat(id="gpt-4o"), ...)
 build_agent(model=Gemini(id="gemini-2.0-flash"), ...)
 build_agent(model=Ollama(id="llama3.3"), ...)
 ```
+
+**`ClaudeSDKAgentRunner`** — wraps the Claude Agent SDK (the engine behind Claude Code). Claude-only, but you get the full Claude Code toolkit: built-in `Read`, `Grep`, `Glob`, `Bash`, `Edit`, `Write`, plus MCP tools you define yourself. Supports token-level streaming (`include_partial_messages=True`) and reasoning-block streaming (`extra_args={"thinking": "enabled"}`).
+
+You'll want this when your agent should genuinely reason over source files, project structure, or a curated knowledge base — not just call tools.
+
+Or bring your own runner by implementing the `AgentRunner` protocol.
 
 ## License
 

@@ -89,9 +89,21 @@ class WebSocketSession:
                             "name": name,
                             "label": meta.label,
                         }
+                        args = getattr(chunk, "args", None)
+                        if args:
+                            payload["args"] = args
                         if meta.icon:
                             payload["icon"] = meta.icon
                         await websocket.send_json(payload)
+                continue
+
+            if event_name == "ReasoningContent":
+                content = getattr(chunk, "content", None)
+                if content:
+                    await websocket.send_json({
+                        "type": "reasoning",
+                        "content": content,
+                    })
                 continue
 
             # Only forward actual text content. Skip RunCompleted (full content

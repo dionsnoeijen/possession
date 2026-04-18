@@ -19,6 +19,7 @@ dependencies = [
 [project.optional-dependencies]
 postgres = ["sqlalchemy>=2.0", "psycopg2-binary>=2.9"]
 anthropic = ["anthropic>=0.50"]
+claude-sdk = ["claude-agent-sdk>=0.1"]
 jwt = ["PyJWT>=2.8"]
 dev = [
     "pytest>=8.0",

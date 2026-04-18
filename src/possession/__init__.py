@@ -11,6 +11,7 @@ from possession.protocols import (
 )
 from possession.services import (
     AgnoAgentRunner,
+    ClaudeSDKAgentRunner,
     MessageRouter,
     QueueEventBus,
     WebSocketSession,
@@ -27,6 +28,7 @@ __all__ = [
     # Services
     "QueueEventBus",
     "AgnoAgentRunner",
+    "ClaudeSDKAgentRunner",
     "MessageRouter",
     "WebSocketSession",
     # Tool
