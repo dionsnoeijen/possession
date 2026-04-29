@@ -45,6 +45,19 @@ class UITool(Toolkit):
             "value": value,
         })
 
+    def open_form(self, form_type: str, params: dict[str, Any] | None = None) -> None:
+        msg: dict[str, Any] = {
+            "type": "ui_action",
+            "action": "open_form",
+            "form_type": form_type,
+        }
+        if params:
+            msg["params"] = params
+        self.bus.publish(msg)
+
+    def submit_form(self) -> None:
+        self.bus.publish({"type": "ui_action", "action": "submit_form"})
+
     def highlight_item(self, item_id: str) -> None:
         self.bus.publish({"type": "highlight_item", "item_id": item_id})
 

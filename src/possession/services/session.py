@@ -1,5 +1,6 @@
 """Per-connection WebSocket session orchestrator."""
 
+import asyncio
 import uuid
 from typing import Any
 
@@ -48,20 +49,50 @@ class WebSocketSession:
         await websocket.accept()
         await websocket.send_json({"type": "ping"})
 
+        # Two concurrent tasks:
+        #   - receive_loop: always reads frames, routes non-chat messages
+        #     (e.g. `context` updates) to their handlers IMMEDIATELY, even
+        #     while the agent is mid-response. Chat messages go on a queue.
+        #   - main loop below: drains the queue one chat turn at a time.
+        # Without this split, agent tools that await a portal state change
+        # (form submission, navigation) would deadlock — the WS read
+        # blocks until the agent yields.
+        user_queue: asyncio.Queue[str | None] = asyncio.Queue()
+
+        async def receive_loop() -> None:
+            try:
+                while True:
+                    data = await websocket.receive_json()
+                    message = self.router.route(data)
+                    if message is not None:
+                        await user_queue.put(message)
+            except _DISCONNECT:
+                await user_queue.put(None)
+            except Exception:
+                await user_queue.put(None)
+
+        recv_task = asyncio.create_task(receive_loop())
+
         try:
             while True:
-                try:
-                    data = await websocket.receive_json()
-                except _DISCONNECT:
-                    return
-
-                message = self.router.route(data)
+                message = await user_queue.get()
                 if message is None:
-                    continue
-
+                    return
                 await self._stream_response(websocket, message)
         except Exception as e:
             await self._send_error(websocket, str(e))
+        finally:
+            recv_task.cancel()
+            try:
+                await recv_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            close = getattr(self.agent, "close", None)
+            if close is not None:
+                try:
+                    await close()
+                except Exception:
+                    pass
 
     async def _stream_response(
         self,

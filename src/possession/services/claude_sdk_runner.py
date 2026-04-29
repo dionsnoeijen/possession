@@ -30,7 +30,12 @@ class _Chunk:
 
 
 class ClaudeSDKAgentRunner:
-    """AgentRunner implementation wrapping claude-agent-sdk."""
+    """AgentRunner implementation wrapping claude-agent-sdk.
+
+    Uses `ClaudeSDKClient` so conversation history is preserved across turns
+    within a WebSocket session. Call `close()` (awaitable) on session end to
+    release the subprocess the SDK manages.
+    """
 
     def __init__(self, options: Any) -> None:
         """
@@ -40,12 +45,26 @@ class ClaudeSDKAgentRunner:
                 installed (the import happens lazily in `run`).
         """
         self.options = options
+        self._client: Any | None = None
+
+    async def close(self) -> None:
+        if self._client is not None:
+            try:
+                await self._client.disconnect()
+            except Exception:
+                pass
+            self._client = None
 
     async def run(self, message: str, session_id: str) -> AsyncIterator[Any]:
         # Lazy import so possession can be installed without claude-agent-sdk.
-        from claude_agent_sdk import query  # type: ignore
+        from claude_agent_sdk import ClaudeSDKClient  # type: ignore
 
-        async for msg in query(prompt=message, options=self.options):
+        if self._client is None:
+            self._client = ClaudeSDKClient(options=self.options)
+            await self._client.connect()
+
+        await self._client.query(message)
+        async for msg in self._client.receive_response():
             msg_type = type(msg).__name__
             # Token-level streaming: StreamEvent carries partial deltas.
             if msg_type == "StreamEvent":
